@@ -1,0 +1,290 @@
+---
+title: "Barely_production_price"
+author: "Fentaw Abitew"
+date: "2022-11-18"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Part 1: Overview
+This test is inspired by a recent EPIC research project. Your task is to perform basic data cleaning, prepare a final dataset for analysis, provide short answers to prompts, and create publication-quality figures and tables.
+
+This task should take five hours or less, but you will have 48 hours total to complete it. The goal of the task is to give you an opportunity to demonstrate your coding competency and your conceptual understanding of empirical economics research. A perfect grade is not a prerequisite for consideration for the position. For the coding portion of this test, we will accept code in Python, R, or STATA. You may consult any pre-existing online programming resources, but you may not ask other people for help. If you find any of these instructions to be confusing, please proceed in a way that you find relevant and reasonable, and list your assumptions in your writeup. Once you have completed the sections below, please submit the following in a .zip file:
+ 
+ * Well-commented code in the language of your choice (.do files for Stata, .R or .Rmd
+files for R, .py or .ipynb files for Python, etc.),
+ 
+ * The final dataset from Section 2,
+ 
+ * The final graphs and tables from Section 3,
+ 
+ * A short document answering the questions from Sections 2-4
+
+
+# Part 2: Data Cleaning 
+
+The central task of this section is to merge production data and price data into one dataset. Both data are sourced from the US Department of Agriculture. Both datasets contain annual data from 1990 to 2018 A brief introduction on the datasets:
+
+* Barley production.csv lists the barley production in bushels by agricultural district. The agricultural district is an administrative division between the county and state levels.
+
+* Barley price.csv lists the mean price received by farmers per bushel of barley by state. Ignore the distinction between the marketing year and the calendar year. We want the final dataset to be:
+ 
+ * a panel with three dimensions: year, agricultural district, state
+ 
+* in each row it contains: barley production and price
+
+```{r}
+# required lib
+library(readr) 
+library(dplyr)
+library(magrittr)
+library(tidyr) 
+library(ggplot2) 
+library(knitr)
+library(forecast)
+
+```
+
+```{r}
+getwd()
+```
+
+
+```{r}
+library(tidyverse)
+library(fs)
+library(dplyr)
+library(stringr)
+```
+
+```{r}
+#combine the price .csv in one file 
+file_path<-"/Users/fam/Desktop/Desktop - FENTAW’s MacBook Air/American_U/R_programming/U_chicago_epic/raw_data/price"
+barely_price_all <- list.files(path = file_path,  # Identify all CSV files
+                       pattern = "*.csv", full.names = TRUE) %>% 
+  lapply(read_csv) %>%                              # Store all files in list
+  bind_rows                                         # Combine data sets into one data set Print data to RStudio console
+
+```
+
+```{r}
+dim(barely_price_all)
+```
+
+```{r}
+#production file
+file_path<-"/Users/fam/Desktop/Desktop - FENTAW’s MacBook Air/American_U/R_programming/U_chicago_epic/raw_data/production"
+barely_production_all <- list.files(path = file_path,pattern = "*.csv", full.names = TRUE) %>%
+  lapply(read_csv) %>%
+  bind_rows   
+```
+
+
+```{r}
+view(barely_production_all)
+view(barely_price_all)
+```
+
+```{r}
+#merge the production and price data to create single dataframe 
+barely_production_all %>%
+  select(year, state, agdistrict, value) -> production_col_final
+head(production_col_final)
+```
+```{r}
+barely_price_all%>%
+  select(year,state, value)->price_col_final
+head(price_col_final)
+```
+```{r}
+barely_price_production <- merge(production_col_final,price_col_final, by= c("year", "state"))
+head(barely_price_production)
+```
+```{r}
+library(data.table)
+# assigning new names to the columns of the data frame
+barely_price_production %>%
+  setnames(old=c("year","state","agdistrict","value.x","value.y"), new= c("year","state", "agricultural_district", "production_in_bushel", "price_per_bushel")) -> barely_price_production_final
+```
+
+```{r}
+dim(barely_price_production_final)
+barely_price_production_final%>%
+  discard(is.null) ->barely_price_production_final
+```
+```{r}
+write.csv(barely_price_production_final, file = "barely_price_production_final.csv")
+view(barely_price_production_final)
+
+```
+
+
+
+
+# Part 3: Data Exploration
+
+The data exploration in this section would be conducted at state-year level.
+
+## 3.1 Time Series Plot: Price
+
+For each year, compute the weighted average of price over all states, where each state’s weight is its production in bushels in that year. Then, plot this weighted average over the time period from 1990 to 2018.
+
+```{r}
+# Note: I read the question as : For each year, compute the weighted average of price over all states, where each state’s weight is its price in bushels in that year. Then, plot this weighted average over the time period from 1990 to 2018.
+
+barely_price_production_final %>%
+  group_by(state,year) %>%
+  summarise(avarege_price_per_bushel = mean(price_per_bushel)) -> mean_price_state
+head(mean_price_state)
+```
+```{r}
+library(ggplot2)
+ggplot(data = mean_price_state, mapping = aes(y = avarege_price_per_bushel, x = year, color= 
+state)) + 
+xlab("year ")+
+ylab("avareg_price_per_bushel ")+
+ggtitle("Time Series Plot: Price")+
+theme_bw()+
+geom_line()
+```
+## 3.2 Time Series Plot: Production
+
+Find the top 3 states in terms of barley production in 2018. Plot the time series of production for these 3 states in the same plot, over the period from 1990 to 2018. Scale the production variable so that it is in millions of bushels.
+
+
+```{r}
+# Avaraged yearly production by state
+barely_price_production_final%>%
+  group_by(state,year) %>%
+  summarise(avarege_production_in_bushel = mean(production_in_bushel)) -> mean_production_state
+
+# Filter 2018 year production
+mean_production_state %>%
+  filter(year==2018) -> production_18
+# arrange desc order to get top 3 producer 
+head(arrange(production_18, desc(avarege_production_in_bushel)),3)
+
+```
+
+```{r}
+library(ggplot2)
+ggplot(data = mean_production_state, mapping = aes(y = avarege_production_in_bushel, x = year, color= state)) + 
+scale_y_continuous(labels =scales::unit_format(suffix = "M", scale = 1e-6))+
+xlab("year ")+
+ylab("avareg_production_per_in_bushel ")+
+ggtitle("Time Series Plot: Production")+
+theme_bw()+
+geom_line()
+```
+## 3.3 Summary Table
+Create a summary table where the rows are specific states (Idaho, Minnesota, Montana,North Dakota, and Wyoming) and the columns are decades (1990-1999, 2000-2009, and 2010-2018). The elements of the table are mean annual state-level production, by decade and state. Scale the production variable so that it is in millions of bushels.
+
+```{r}
+head(barely_price_production_final)
+```
+
+```{r}
+barely_price_production_final%>%
+  filter(state==c("IDAHO", "MINNESOTA", "MONTANA", "NORTH DAKOTA", "WYOMING"))%>%
+  group_by(state, year) %>%
+  summarise(avarege_production_in_bushel = mean(production_in_bushel))->sum_table
+
+```
+
+```{r}
+sum_table%>%
+  mutate(year_bin = cut(year, breaks = c(1990,1999,2009,2018),dig.lab=4, labels = c("1990-1999","2000-2009","2010-2018")))-> sum_tablec
+#c("1990-1999","2000-2009","2010-2018")
+```
+
+```{r}
+head(sum_tablec)
+```
+```{r}
+sum_tablec%>%
+  group_by(state,year_bin, avarege_production_in_bushel) %>%
+  summarise(avarege_production_in_bushel=mean(avarege_production_in_bushel*1e-06)) ->final_df
+head(final_df)
+```
+```{r}
+ final_df %>%
+  select(state, year_bin, avarege_production_in_bushel) %>%
+  mutate(row = row_number()) %>% 
+  spread(year_bin, avarege_production_in_bushel) 
+  
+
+  
+
+```
+
+```{r}
+#head(summary_table,10)
+```
+# 4 Short Answer
+Our goal is to estimate the sensitivity of US farmers’ barley production to barley price, using the provided data, at the level of agricultural district by year.
+
+```{r}
+barely_price_production_final%>%
+  group_by(agricultural_district,year,price_per_bushel, state) %>%
+  summarise(avarege_production_in_bushel = mean(production_in_bushel)) -> agricultural_district_mean_production
+```
+```{r}
+head(agricultural_district_mean_production)
+```
+
+* First write down a regression equation of a linear model of production on a constant and price. We want the coefficient on price to have the interpretation of an elasticity. Ensure that the terms are properly indexed. Report the results of this regression, and interpret the coefficient on price.
+
+```{r}
+#production_hat= beta0_hat + beta1_hat(price)
+reg<-lm(log(avarege_production_in_bushel)~log(price_per_bushel), data =agricultural_district_mean_production)
+summary(reg)
+```
+Interpretation: A 1% increase in barely price would lead to 1.2% increase of barely production.
+
+
+* What variables do you think we should control for? Choose two and explain why they might help us identify the coefficient on price. These variables need not to be in the original dataset.
+
+#Location(state or agriculture district) and production_year(may contain weather shock in it)
+```{r}
+reg<-lm(log(avarege_production_in_bushel)~log(price_per_bushel) + year + agricultural_district, data = agricultural_district_mean_production)
+summary(reg)
+```
+
+* Price is an endogenous variable in our model. Provide examples of two different types of endogeneity that could bias our estimated coefficient on price.
+
+Many correlated missing regressor. I.e Farmers storage facility, weather and “time of harvest(farming)” 
+
+* We can somewhat mitigate this problem by including year and state fixed effects. Run this regression on the provided data and report the estimated coefficient on price, along with its standard error. Justify the method you used to adjust the standard error. Is this coefficient causally interpretative?
+
+Yes, holding the two fixed, the log(price coefficient changed and obliviously the adjusted squared increase)
+
+log(price_per_bushel)  0.143390   (se:0.093462) Adjusted R-squared:  0.554 (55.4%)
+
+```{r}
+reg<-lm(log(avarege_production_in_bushel)~log(price_per_bushel) + year + state, dat=agricultural_district_mean_production)
+summary(reg)
+```
+
+*  Which potential sources of price endogeneity does adding fixed effects address? Discuss the difference (if any) in results with the results above. Which sources might still remain? Make sure to provide concrete examples.
+
+other omitted variables with their confounding effect still remain.(Weather, economic policy variable, world_c)
+
+* To address any remaining sources of price endogeneity, suppose that we use the transportation cost between location of barley production and its market as an instrument for price. Explain why you think this is or is not a valid instrument. What challenges
+could arise when using this instrument in practice?
+
+The two BEST criteria for IV are:
+(i) It causes variation in the treatment variable; (yes, Transportation cost causes variation in the the treatment variable, P)
+(ii) It does not have a direct effect on the outcome variable, only indirectly through the
+treatment variable (here, transportation cost causes variation directly to both variables, thus, not be a good IV)
+
+* Suppose one of the other research assistants accidentally deletes 10% of the observations of the barley production variable. How would you expect dropping these observations to change the estimated coefficient on price and its standard error if the deletions are
+at random? What if the deletions are not at random?
+
+If the deletion random: we can rework on the 90% remaining data (with cross validation) and then we can check what happen with the coefficient, it all depends(we can tell after recheck)
+
+If the deletion is not random: it is complicated and hard to tell and simply, I don't know.
+
+
